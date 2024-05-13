@@ -15,17 +15,23 @@ typedef struct {
 typedef struct body {
 	vect pos;
 	struct body *next;
+	struct body *prev;
 } body;
 
-body hiss;
+body *hiss;
+body *hiss_tail;
+
 vect food;
 vect velocity;
 
 int iterations = 0;
 
+char *yellow = "\033[103m";
+char *blue = "\033[104m";
+char *reset = "\033[0m";
+
 void draw(void) {
 	clear();
-	printw("%i head: (%i, %i)\n", iterations, hiss.pos.x, hiss.pos.y);
 
 	printw(" ");
 	for (int i = 0; i < width; i++) {
@@ -36,9 +42,17 @@ void draw(void) {
 	for (int i = 0; i < height; i++) {
 		printw("|");
 		for (int j = 0; j < width; j++) {
-			if (i == hiss.pos.y && j == hiss.pos.x) printw(" h");
-			else if (i == food.y && j == food.x) printw(" 1");
-			else printw("  ");
+			int has = 0;
+			for (body *hiss_current = hiss; hiss_current != NULL; hiss_current = hiss_current->next) {
+				if (i == hiss_current->pos.y && j == hiss_current->pos.x) {
+					has = true;
+					printw(" h");
+					break;
+				}
+				if (hiss_current == hiss_tail) break;
+			}
+			if (i == food.y && j == food.x) printw(" o", yellow, reset);
+			else if (!has) printw("  ");
 		}
 		printw(" |\n");
 	}
@@ -55,18 +69,29 @@ void place_food(void) {
 	food.y = rand() % height;
 }
 
+void free_hiss() {
+	body *next_hiss;
+	while (hiss != NULL) {
+		next_hiss = hiss->next;
+		free(hiss);
+		hiss = next_hiss;
+	}
+}
+
 int main(int argc, char *argv[]) {
 	initscr();
 	noecho();
 	srand(clock());
 
-	hiss.pos.x = 0;
-	hiss.pos.y = 0;
+	hiss = malloc(sizeof(body));
+	hiss->pos.x = 0;
+	hiss->pos.y = 0;
+	hiss->next = hiss;
+	hiss->prev = hiss;
+
+	hiss_tail = hiss;
 
 	place_food();
-
-	int x = 0;
-	int y = 0;
 
 	int index = 0;
 
@@ -90,15 +115,28 @@ int main(int argc, char *argv[]) {
 			velocity.y = 0;
 		}
 
-		hiss.pos.x += velocity.x;
-		hiss.pos.y += velocity.y;
+		hiss_tail->pos.x = hiss->pos.x + velocity.x;
+		hiss_tail->pos.y = hiss->pos.y + velocity.y;
 
-		if (hiss.pos.x < 0) hiss.pos.x = width - 1;
-		if (hiss.pos.y < 0) hiss.pos.y = height - 1;
-		if (hiss.pos.x >= width) hiss.pos.x = 0;
-		if (hiss.pos.y >= height) hiss.pos.y = 0;
+		hiss = hiss_tail;
+		hiss_tail = hiss->prev;
 
-		if (hiss.pos.x == food.x && hiss.pos.y == food.y) {
+		if (hiss->pos.x < 0) hiss->pos.x = width - 1;
+		if (hiss->pos.y < 0) hiss->pos.y = height - 1;
+		if (hiss->pos.x >= width) hiss->pos.x = 0;
+		if (hiss->pos.y >= height) hiss->pos.y = 0;
+
+		if (hiss->pos.x == food.x && hiss->pos.y == food.y) {
+			body *hiss_next = malloc(sizeof(body));
+			hiss_next->pos.x = hiss_tail->pos.x;
+			hiss_next->pos.y = hiss_tail->pos.y;
+			hiss_next->next = hiss;
+			hiss_next->prev = hiss_tail;
+
+			hiss->prev = hiss_next;
+
+			hiss_tail->next = hiss_next;
+			hiss_tail = hiss_next;
 
 			place_food();
 		}
