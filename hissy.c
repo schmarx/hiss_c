@@ -3,6 +3,7 @@
 #include <ncurses/ncurses.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <wchar.h>
 
 int width = 10;
@@ -15,6 +16,7 @@ typedef struct {
 
 typedef struct body {
 	vect pos;
+	chtype shape[2];
 	struct body *next;
 	struct body *prev;
 } body;
@@ -24,6 +26,7 @@ body *hiss_tail;
 
 vect food;
 vect velocity;
+vect last_pos;
 
 int iterations = 0;
 
@@ -46,22 +49,78 @@ wchar_t bottom_right = 188;		 // ╝
 wchar_t bottom_left = 200;		 // ╚
 wchar_t top_left = 201;			 // ╔
 
+int score = -1;
+
+char *title = "hissy";
+
+/** print the title */
+void print_title() {
+	for (int i = 0; i < 5; i++) {
+		addch(title[i]);
+	}
+}
+
+/** make horizontal line of certain length */
+void line(int len) {
+	for (int i = 0; i < len; i++) {
+		addch(ACS_HLINE);
+	}
+}
+
+/** update hissy's shape based on other segments' positions */
+void update_shape(chtype vals[2], int curr_x, int curr_y, int prev_x, int prev_y, int next_x, int next_y) {
+	if (curr_x == prev_x && curr_x == next_x) {
+		vals[0] = ' ';
+		vals[1] = ACS_VLINE;
+	} else if (curr_y == prev_y && curr_y == next_y) {
+		vals[0] = ACS_HLINE;
+		vals[1] = ACS_HLINE;
+	}
+
+	else if (curr_x == prev_x && curr_y < prev_y && curr_x < next_x) {
+		vals[0] = ' ';
+		vals[1] = ACS_ULCORNER;
+	} else if (curr_x == prev_x && curr_y < prev_y && curr_x > next_x) {
+		vals[0] = ACS_HLINE;
+		vals[1] = ACS_URCORNER;
+	} else if (curr_x == prev_x && curr_y > prev_y && curr_x < next_x) {
+		vals[0] = ' ';
+		vals[1] = ACS_LLCORNER;
+	} else if (curr_x == prev_x && curr_y > prev_y && curr_x > next_x) {
+		vals[0] = ACS_HLINE;
+		vals[1] = ACS_LRCORNER;
+	}
+
+	else if (curr_y == prev_y && curr_x < prev_x && curr_y < next_y) {
+		vals[0] = ' ';
+		vals[1] = ACS_ULCORNER;
+	} else if (curr_y == prev_y && curr_x < prev_x && curr_y > next_y) {
+		vals[0] = ' ';
+		vals[1] = ACS_LLCORNER;
+	} else if (curr_y == prev_y && curr_x > prev_x && curr_y < next_y) {
+		vals[0] = ACS_HLINE;
+		vals[1] = ACS_URCORNER;
+	} else if (curr_y == prev_y && curr_x > prev_x && curr_y > next_y) {
+		vals[0] = ACS_HLINE;
+		vals[1] = ACS_LRCORNER;
+	}
+
+	else {
+		vals[0] = 'O';
+		vals[1] = 'O';
+	}
+}
+
+/** draw the game board */
 void draw(void) {
 	clear();
 
 	addch(ACS_ULCORNER);
-	char *title = "hissy";
 
-	for (int i = 0; i < width - 2; i++) {
-		addch(ACS_HLINE);
-	}
-	for (int i = 0; i < 5; i++) {
-		addch(title[i]);
-	}
-	for (int i = 0; i < width - 3; i++) {
-		addch(ACS_HLINE);
-	}
-	addch(ACS_HLINE);
+	line(2);
+	print_title();
+	line(2 * width - 2 + 1 - strlen(title));
+
 	addch(ACS_URCORNER);
 	addch('\n');
 
@@ -71,66 +130,27 @@ void draw(void) {
 			int has = 0;
 
 			for (body *hiss_current = hiss; hiss_current != NULL; hiss_current = hiss_current->next) {
-				if (i == hiss_current->pos.y && j == hiss_current->pos.x) {
-					char ch = ' ';
+				int prev_y = hiss_current->prev->pos.y;
+				int prev_x = hiss_current->prev->pos.x;
+				int next_y = hiss_current->next->pos.y;
+				int next_x = hiss_current->next->pos.x;
 
+				if (i == hiss_current->pos.y && j == hiss_current->pos.x) {
+					has = true;
 					attron(COLOR_PAIR(1));
 
 					if (hiss_current == hiss) {
 						addch(' ');
-						addch('H');
-					} else if (hiss_current->pos.y == hiss_current->prev->pos.y && hiss_current->pos.y == hiss_current->next->pos.y) {
-						addch(ACS_HLINE);
-						addch(ACS_HLINE);
+						if (velocity.x == 1) addch('<');
+						else if (velocity.x == -1) addch('>');
+						else if (velocity.y == 1) addch('A');
+						else if (velocity.y == -1) addch('Y');
 					} else {
-						if (hiss_current->pos.x == hiss_current->prev->pos.x && hiss_current->pos.x == hiss_current->next->pos.x) {
-							addch(' ');
-							addch(ACS_VLINE);
-						} else if (hiss_current->pos.x == hiss_current->prev->pos.x && hiss_current->pos.y < hiss_current->prev->pos.y && hiss_current->pos.x < hiss_current->next->pos.x) {
-							addch(' ');
-							addch(ACS_ULCORNER);
-						} else if (hiss_current->pos.x == hiss_current->prev->pos.x && hiss_current->pos.y > hiss_current->prev->pos.y && hiss_current->pos.x < hiss_current->next->pos.x) {
-							addch(' ');
-							addch(ACS_LLCORNER);
-						} else if (hiss_current->pos.y == hiss_current->prev->pos.y && hiss_current->pos.x < hiss_current->prev->pos.x && hiss_current->pos.y < hiss_current->next->pos.y) {
-							addch(' ');
-							addch(ACS_ULCORNER);
-						} else if (hiss_current->pos.y == hiss_current->prev->pos.y && hiss_current->pos.x < hiss_current->prev->pos.x && hiss_current->pos.y > hiss_current->next->pos.y) {
-							addch(' ');
-							addch(ACS_LLCORNER);
-						}
-
-						else if (hiss_current->pos.x == hiss_current->prev->pos.x && hiss_current->pos.y > hiss_current->prev->pos.y && hiss_current->pos.x > hiss_current->next->pos.x) {
-							addch(ACS_HLINE);
-							addch(ACS_LRCORNER);
-						} else if (hiss_current->pos.x == hiss_current->prev->pos.x && hiss_current->pos.y < hiss_current->prev->pos.y && hiss_current->pos.x > hiss_current->next->pos.x) {
-							addch(ACS_HLINE);
-							addch(ACS_URCORNER);
-						} else if (hiss_current->pos.y == hiss_current->prev->pos.y && hiss_current->pos.x > hiss_current->prev->pos.x && hiss_current->pos.y < hiss_current->next->pos.y) {
-							addch(ACS_HLINE);
-							addch(ACS_URCORNER);
-						} else if (hiss_current->pos.y == hiss_current->prev->pos.y && hiss_current->pos.x > hiss_current->prev->pos.x && hiss_current->pos.y > hiss_current->next->pos.y) {
-							addch(ACS_HLINE);
-							addch(ACS_LRCORNER);
-						} else addch('O');
+						addch(hiss_current->shape[0]);
+						addch(hiss_current->shape[1]);
 					}
 
-					// if (hiss_current == hiss) printw(" %c", 'H');
-					// else if (hiss_current->next->pos.x == hiss_current->pos.x) {
-					// 	addch(' ');
-					// 	if (hiss_current->prev->pos.x == hiss_current->pos.x) addch(ACS_VLINE);
-					// 	else if (hiss_current->prev->pos.x > hiss_current->prev->pos.x) addch(ACS_LLCORNER);
-					// 	else addch(ACS_LRCORNER);
-					// } else if (hiss_current->next->pos.x == hiss_current->pos.x) {
-					// 	addch(' ');
-					// 	addch(ACS_VLINE);
-					// } else if (hiss_current->next->pos.y == hiss_current->pos.y) {
-					// 	addch(ACS_HLINE);
-					// 	addch(ACS_HLINE);
-					// } else printw(" %c", 'h');
-
 					attroff(COLOR_PAIR(1));
-					has = true;
 					break;
 				}
 				if (hiss_current == hiss_tail) break;
@@ -147,15 +167,12 @@ void draw(void) {
 	}
 
 	addch(ACS_LLCORNER);
-	for (int i = 0; i < width; i++) {
-		addch(ACS_HLINE);
-		addch(ACS_HLINE);
-	}
-	addch(ACS_HLINE);
+	line(width * 2 + 1);
 	addch(ACS_LRCORNER);
 	addch('\n');
 }
 
+/** add length to hissy */
 void add(void) {
 	body *hiss_next = malloc(sizeof(body));
 	hiss_next->pos.x = hiss_tail->pos.x;
@@ -163,17 +180,48 @@ void add(void) {
 	hiss_next->next = hiss;
 	hiss_next->prev = hiss_tail;
 
+	hiss_next->shape[0] = hiss_tail->shape[0];
+	hiss_next->shape[1] = hiss_tail->shape[1];
+
 	hiss->prev = hiss_next;
 
 	hiss_tail->next = hiss_next;
 	hiss_tail = hiss_next;
 }
 
+/** randomly place food */
 void place_food(void) {
-	food.x = rand() % width;
-	food.y = rand() % height;
+	int possible = 0;
+	int *possible_values = malloc(sizeof(int) * width * height);
+
+	for (int i = 0; i < height; i++) {
+		for (int j = 0; j < width; j++) {
+			int occupied = 0;
+			for (body *hiss_current = hiss; hiss_current != NULL; hiss_current = hiss_current->next) {
+				if (hiss_current->pos.y == i && hiss_current->pos.x == j) {
+					occupied = 1;
+					break;
+				}
+
+				if (hiss_current == hiss_tail) break;
+			}
+			if (!occupied) possible_values[possible++] = i * width + j;
+		}
+	}
+	if (possible == 0) {
+		// game win
+	} else {
+		score++;
+
+		int cell = possible_values[rand() % possible];
+		food.x = cell % width;
+		food.y = cell / width;
+	}
+
+	free(possible_values);
 }
 
+/** frees memory */
 void free_hiss() {
 	body *next_hiss;
 	while (hiss != NULL) {
@@ -183,8 +231,8 @@ void free_hiss() {
 	}
 }
 
-int main(int argc, char *argv[]) {
-
+/** initialises game */
+void init(void) {
 	initscr();
 	noecho();
 	srand(clock());
@@ -201,15 +249,20 @@ int main(int argc, char *argv[]) {
 
 	hiss_tail = hiss;
 
-	place_food();
-
-	int index = 0;
-
 	velocity.x = 1;
 	velocity.y = 0;
 
+	last_pos.x = 0;
+	last_pos.y = 0;
+}
+
+int main(int argc, char *argv[]) {
+	init();
+
+	place_food();
 	timeout(100);
 	while (1) {
+		// user input
 		char c = getch();
 		if (c == 'w' && velocity.y == 0) {
 			velocity.x = 0;
@@ -225,17 +278,36 @@ int main(int argc, char *argv[]) {
 			velocity.y = 0;
 		}
 
+		// move tail piece to the front
+		last_pos.x = hiss_tail->pos.x;
+		last_pos.y = hiss_tail->pos.y;
+
 		hiss_tail->pos.x = hiss->pos.x + velocity.x;
 		hiss_tail->pos.y = hiss->pos.y + velocity.y;
 
 		hiss = hiss_tail;
 		hiss_tail = hiss->prev;
 
+		// check for collisions
+		for (body *hiss_current = hiss; hiss_current != NULL; hiss_current = hiss_current->next) {
+			if (hiss_current == hiss_tail) break;
+
+			if (hiss_current->next->pos.y == hiss->pos.y && hiss_current->next->pos.x == hiss->pos.x) {
+				printf("game over\n");
+				return 0;
+			}
+		}
+
+		// update shape
+		update_shape(hiss->next->shape, hiss->next->pos.x, hiss->next->pos.y, hiss->pos.x, hiss->pos.y, hiss->next->next->pos.x, hiss->next->next->pos.y);
+
+		// check board bounds
 		if (hiss->pos.x < 0) hiss->pos.x = width - 1;
 		if (hiss->pos.y < 0) hiss->pos.y = height - 1;
 		if (hiss->pos.x >= width) hiss->pos.x = 0;
 		if (hiss->pos.y >= height) hiss->pos.y = 0;
 
+		// check whether you are in contact with food
 		if (hiss->pos.x == food.x && hiss->pos.y == food.y) {
 			add();
 			place_food();
@@ -246,7 +318,6 @@ int main(int argc, char *argv[]) {
 	}
 
 	endwin();
-
 	free_hiss(hiss);
 
 	return 0;
