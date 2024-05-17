@@ -57,6 +57,8 @@ wchar_t top_left = 201;			 // ╔
 
 int score = -1;
 
+int turn_length = 150;
+
 char *title = "hissy";
 
 /** print the title */
@@ -136,15 +138,11 @@ void draw(void) {
 			int has = 0;
 
 			for (body *hiss_current = hiss; hiss_current != NULL; hiss_current = hiss_current->next) {
-				int prev_y = hiss_current->prev->pos.y;
-				int prev_x = hiss_current->prev->pos.x;
-				int next_y = hiss_current->next->pos.y;
-				int next_x = hiss_current->next->pos.x;
-
 				if (i == hiss_current->pos.y && j == hiss_current->pos.x) {
 					has = true;
 					attron(COLOR_PAIR(1));
 
+					// the head
 					if (hiss_current == hiss) {
 						addch(' ');
 						if (velocity.x == 1) addch('<');
@@ -163,9 +161,13 @@ void draw(void) {
 			}
 			if (i == food.y && j == food.x) {
 				attron(COLOR_PAIR(2));
-				printw(" o", yellow, reset);
+				addch(' ');
+				addch('o');
 				attroff(COLOR_PAIR(2));
-			} else if (!has) printw("  ");
+			} else if (!has) {
+				addch(' ');
+				addch(' ');
+			}
 		}
 		addch(' ');
 		addch(ACS_VLINE);
@@ -180,6 +182,8 @@ void draw(void) {
 
 /** add length to hissy */
 void add(void) {
+	turn_length = turn_length * 0.95;
+
 	body *hiss_next = malloc(sizeof(body));
 	hiss_next->pos.x = hiss_tail->pos.x;
 	hiss_next->pos.y = hiss_tail->pos.y;
@@ -230,7 +234,9 @@ void place_food(void) {
 /** frees memory */
 void free_hiss() {
 	body *next_hiss;
-	while (hiss != NULL) {
+	int done = 0;
+	while (hiss != NULL && !done) {
+		if (hiss == hiss_tail) done = true;
 		next_hiss = hiss->next;
 		free(hiss);
 		hiss = next_hiss;
@@ -266,10 +272,20 @@ int main(int argc, char *argv[]) {
 	init();
 
 	place_food();
-	timeout(100);
+
 	while (1) {
 		// user input
+		timeout(turn_length);
 		char c = getch();
+
+		// time_t start_time = clock();
+		// while ((clock() - start_time) * 1000 / CLOCKS_PER_SEC < turn_length) {
+		// 	timeout(turn_length - (clock() - start_time) * 1000 / CLOCKS_PER_SEC);
+		// 	char ch = getch();
+		// 	if (ch == 'w' || ch == 'a' || ch == 's' || ch == 'd') c = ch;
+		// }
+		// printf("moving\n");
+
 		if (c == 'w' && velocity.y == 0) {
 			velocity.x = 0;
 			velocity.y = -1;
@@ -282,6 +298,8 @@ int main(int argc, char *argv[]) {
 		} else if (c == 'd' && velocity.x == 0) {
 			velocity.x = 1;
 			velocity.y = 0;
+		} else if (c == 'q') {
+			break;
 		}
 
 		// move tail piece to the front
@@ -325,6 +343,8 @@ int main(int argc, char *argv[]) {
 
 	endwin();
 	free_hiss(hiss);
+
+	printf("\ngoodbye :)\n\n");
 
 	return 0;
 }
