@@ -1,10 +1,16 @@
 
 #include <locale.h>
-#include <ncurses/ncurses.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 #include <wchar.h>
+
+#ifdef __linux__
+#include <ncurses/ncurses.h>
+#else
+#include <ncurses/ncurses.h>
+#endif
 
 int width = 10;
 int height = 10;
