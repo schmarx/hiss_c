@@ -7,7 +7,7 @@
 #include <wchar.h>
 
 #ifdef __linux__
-#include <ncurses/ncurses.h>
+#include <ncurses.h>
 #else
 #include <ncurses/ncurses.h>
 #endif
