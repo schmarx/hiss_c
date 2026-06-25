@@ -342,7 +342,7 @@ int main(int argc, char *argv[]) {
 	}
 
 	endwin();
-	free_hiss(hiss);
+	free_hiss();
 
 	printf("\ngoodbye :)\n\n");
 
